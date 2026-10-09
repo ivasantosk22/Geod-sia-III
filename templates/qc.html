@@ -55,4 +55,15 @@
 {% for t,b in res.figs %}<h3>{{ t }}</h3><figure><img src="data:image/png;base64,{{ b }}" alt="{{ t }}">
 <a class="btn sec" href="{{ url_for('qc_baixar', sid=sid, what='g' ~ loop.index) }}">Baixar PNG</a></figure>{% endfor %}</section>
 {% endif %}
+<form action="/processar_qc" method="POST" enctype="multipart/form-data">
+    <label for="arquivo_zip">Envie o ficheiro GNSS Compactado (.zip):</label>
+    <input type="file" name="arquivo_zip" id="arquivo_zip" accept=".zip" required>
+    <button type="submit">Executar TEQC</button>
+</form>
+{% if mensagem %}
+    <div style="padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; margin-top: 20px;">
+        <h4>Resultado do TEQC:</h4>
+        <p>{{ mensagem }}</p>
+    </div>
+{% endif %}
 </main></body></html>
