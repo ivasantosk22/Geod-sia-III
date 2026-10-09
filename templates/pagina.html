@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Efemérides transmitidas × precisas</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}"><style>
+.tabs{display:flex;gap:12px;margin-top:16px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:12px;min-width:240px;padding:10px 22px 10px 14px;border-radius:14px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:28px;height:28px;flex:none}
+.tabs .tab .tt{line-height:1.25}
+.tabs .tab b{display:block;font-size:15px}
+.tabs .tab small{display:block;font-size:11.5px;opacity:.75}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tabs .tab.on small{opacity:.7}
+</style>
+</head><body>
+<header><h1>Efemérides transmitidas × precisas</h1><span>Posição de satélites GNSS · comparação com SP3</span>
+<nav class="tabs"><a class="tab on" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b><small>transmitidas × precisas (SP3)</small></div></a><a class="tab" href="/obs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis RINEX</b><small>qualidade L1/L2 · saltos de ciclo</small></div></a></nav></header>
+<main>
+{% for m in get_flashed_messages() %}<div class="aviso erro">{{ m }}</div>{% endfor %}
+
+{% if not sid %}
+<section class="card"><h2>1. Carregar arquivos</h2>
+<form action="{{ url_for('enviar') }}" method="post" enctype="multipart/form-data">
+<label>Arquivo de navegação (RINEX .n / .14l / .rnx)<input type="file" name="nav"></label>
+<label>Efemérides precisas (.sp3)<input type="file" name="sp3"></label>
+<div class="acoes"><button>Carregar</button>
+<button name="exemplo" value="1" class="sec" formnovalidate>Usar arquivos de exemplo (Galileo E19, 22/07/2014)</button></div>
+</form></section>
+{% else %}
+<section class="card"><h2>2. Parâmetros do cálculo</h2>
+<form method="post" id="fm">
+<div class="grade">
+<label>Satélite<select id="sat">{% for s in sats %}<option>{{ s }}</option>{% endfor %}</select></label>
+<label>Efeméride (registro)<select id="reg" name="reg"></select></label>
+<label>Início (tempo GPS)<input type="datetime-local" id="inicio" name="inicio" required value="{{ f.get('inicio','') }}"></label>
+<label>Passo (min)<input type="number" name="passo" step="any" min="0.1" value="{{ f.get('passo', 15) }}"></label>
+<label>Nº de épocas<input type="number" name="n" min="2" max="500" value="{{ f.get('n', 9) }}"></label>
+<label class="chk"><input type="checkbox" name="terra" {{ 'checked' if 'terra' in f }}> Mostrar a Terra no gráfico 3D</label>
+<label class="chk"><input type="checkbox" name="sem_dts" {{ 'checked' if 'sem_dts' in f }}> Não aplicar dts (usar a época como tempo GPS)</label>
+<label class="chk"><input type="checkbox" name="gm_icd" {{ 'checked' if 'gm_icd' in f }}> GM do ICD do GPS (3,986005e14)</label>
+</div>
+{% if not tem_sp3 %}<div class="aviso">Nenhum SP3 carregado: só serão calculadas as coordenadas.</div>{% endif %}
+<div class="acoes"><button>Calcular</button><a class="btn sec" href="{{ url_for('index') }}">Trocar arquivos</a></div>
+</form></section>
+<script>
+const REGS={{ regs|tojson }}, sat=document.getElementById('sat'), reg=document.getElementById('reg'), ini=document.getElementById('inicio');
+const regAnt="{{ f.get('reg','') }}";
+function fill(){reg.innerHTML='';REGS.filter(r=>r.sat===sat.value).forEach(r=>reg.add(new Option(r.rot,r.i)));}
+function setIni(){const r=REGS.find(x=>x.i==reg.value);if(r)ini.value=r.toc;}
+sat.onchange=()=>{fill();setIni();};reg.onchange=setIni;
+const ra=REGS.find(r=>String(r.i)===regAnt);if(ra)sat.value=ra.sat;
+fill();if(ra)reg.value=regAnt;if(!ini.value)setIni();
+</script>
+
+{% if res %}
+<section class="card"><h2>3. Resultados — {{ res.sat }}</h2>
+<div class="chips"><span>Semana GPS <b>{{ res.semana }}</b></span><span>Dia GPS <b>{{ res.dow }}</b></span>
+<span>DOY <b>{{ res.doy }}</b></span><span>Início <b>{{ res.ini.strftime('%d/%m/%Y %H:%M') }}</b></span>
+<span>Passo <b>{{ res.passo }} min</b></span><span>Épocas <b>{{ res.n }}</b></span><span>GM <b>{{ res.gm }}</b></span><span>dts <b>{{ 'aplicado' if res.dts else 'não aplicado' }}</b></span></div>
+{% for a in res.avisos %}<div class="aviso">{{ a }}</div>{% endfor %}
+{% if res.resumo %}<p class="resumo">{{ res.resumo }}</p>{% endif %}
+<h3>Coordenadas e discrepâncias (transmitida − SP3)</h3>
+<div class="rolar"><table><tr>{% for c in cab %}<th>{{ c }}</th>{% endfor %}</tr>
+{% for r in res.rows %}<tr>{% for c in r %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+{% if res.est %}<h3>Estatísticas das discrepâncias (m)</h3>
+<table class="peq"><tr><th></th><th>Média</th><th>RMS</th><th>Máx |d|</th></tr>
+{% for e in res.est %}<tr><td>{{ e[0] }}</td><td>{{ e[1] }}</td><td>{{ e[2] }}</td><td>{{ e[3] }}</td></tr>{% endfor %}</table>{% endif %}
+<div class="acoes"><a class="btn" href="{{ url_for('baixar', sid=sid, what='csv') }}">Baixar CSV</a></div>
+<h3>Gráficos</h3>
+{% for b in res.b64 %}{% if b %}<figure><img src="data:image/png;base64,{{ b }}" alt="Gráfico {{ loop.index }}">
+<a class="btn sec" href="{{ url_for('baixar', sid=sid, what='g' ~ loop.index) }}">Baixar PNG</a></figure>{% endif %}{% endfor %}
+<h3>Parâmetros extraídos da efeméride</h3>
+<table class="peq"><tr><th>Parâmetro</th><th>Valor</th><th>Unid.</th></tr>
+{% for a,v,u in res.params %}<tr><td>{{ a }}</td><td>{{ v }}</td><td>{{ u }}</td></tr>{% endfor %}</table>
+<h3>Trecho do arquivo de navegação (para o apêndice)</h3><pre>{{ res.raw }}</pre>
+</section>{% endif %}
+{% endif %}
+</main></body></html>
