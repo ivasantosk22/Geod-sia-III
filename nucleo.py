@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Núcleo: leitura de RINEX de navegação (v2 GPS / v3 GPS+Galileo), SP3, cálculo da
 posição (mesmas fórmulas do Orbita_galileo_Final.sce) e gráficos."""
-
 import io
-import os
-import zipfile
-import subprocess
-from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import numpy as np
@@ -190,53 +185,3 @@ def graficos(rot, P, Ps, terra, titulo):
     ax.set_xlabel('X (km)', labelpad=10); ax.set_ylabel('Y (km)', labelpad=10); ax.set_zlabel('Z (km)', labelpad=10)
     ax.set_title('Órbita reconstruída em 3D\n' + titulo); ax.legend(loc='upper left', fontsize=8); f3.tight_layout()
     return [_png(f1), g2, _png(f3)]
-
-
-# --- NOVA FUNÇÃO ADICIONADA PARA PROCESSAMENTO GNSS (CRX2RNX e TEQC) ---
-def processar_dados_gnss(caminho_zip, pasta_saida=None):
-    caminho_zip = Path(caminho_zip)
-    if pasta_saida is None:
-        pasta_saida = caminho_zip.parent
-    else:
-        pasta_saida = Path(pasta_saida)
-        pasta_saida.mkdir(parents=True, exist_ok=True)
-
-    # 1. Extração do ficheiro ZIP
-    with zipfile.ZipFile(caminho_zip, 'r') as zip_ref:
-        zip_ref.extractall(pasta_saida)
-        arquivos_extraidos = zip_ref.namelist()
-
-    # Identifica o ficheiro de observação Hatanaka (.25d, .24d, etc.)
-    arquivo_hatanaka = next((pasta_saida / f for f in arquivos_extraidos if f.endswith('d')), None)
-
-    if not arquivo_hatanaka:
-        return "Erro: Nenhum ficheiro Hatanaka (.d) encontrado no zip."
-
-    # 2. Conversão Hatanaka para RINEX (crx2rnx)
-    try:
-        subprocess.run(["crx2rnx", str(arquivo_hatanaka)], check=True, cwd=pasta_saida)
-    except subprocess.CalledProcessError as e:
-        return f"Erro na conversão crx2rnx: {e}"
-    except FileNotFoundError:
-        return "Erro: Executável 'crx2rnx' não encontrado no PATH do sistema."
-
-    arquivo_rinex = str(arquivo_hatanaka)[:-1] + 'o'
-
-    if not os.path.exists(arquivo_rinex):
-        return "Erro: O ficheiro RINEX não foi gerado."
-
-    # 3. Execução do TEQC
-    try:
-        subprocess.run(
-            ["teqc", "+qc", Path(arquivo_rinex).name],
-            cwd=pasta_saida,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return f"Processamento concluído com sucesso. Relatórios gerados em {pasta_saida}"
-    
-    except subprocess.CalledProcessError as e:
-        return f"Erro ao executar TEQC: {e.stderr}"
-    except FileNotFoundError:
-        return "Erro: Executável 'teqc' não encontrado no PATH do sistema."
