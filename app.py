@@ -5,7 +5,7 @@ import base64, csv, gzip, io, os, re, threading, uuid, webbrowser, zipfile
 from datetime import datetime
 import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash
-import nucleo, observaveis
+import nucleo, observaveis, teqc
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
@@ -184,7 +184,7 @@ def obs_painel(sid):
             cab_c, rows_c, figs_c = observaveis.comparar(fs, ea, eb, limiar)
             comp = dict(cab=cab_c, rows=rows_c, ea=ea, eb=eb, figs=[(t, base64.b64encode(p).decode()) for t, p in figs_c],
                         pngs=[p for _, p in figs_c])
-        res = dict(resumo=[observaveis.resumo(x, limiar) for x in fs], figs=[(t, base64.b64encode(p).decode()) for t, p in figs],
+        res = dict(resumo=[observaveis.resumo(x, limiar) for x in fs],  figs=[(t, base64.b64encode(p).decode()) for t, p in figs],
                    pngs=[p for _, p in figs], sat=sat, limiar=limiar, idx=idx, obs=f['obs'], est=est, comp=comp)
     except Exception as ex:
         flash(f'Erro no processamento: {ex}')
@@ -213,6 +213,66 @@ def obs_baixar(sid, what):
     if k is None or k >= len(res['pngs']):
         abort(404)
     return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'obs_grafico{k + 1}.png')
+
+
+QC = {}
+
+
+@app.route('/qc')
+def qc_index():
+    return render_template('qc.html', sid=None)
+
+
+@app.route('/qc/enviar', methods=['POST'])
+def qc_enviar():
+    try:
+        arqs = [x for x in request.files.getlist('arquivos') if x.filename]
+        if not arqs:
+            raise ValueError('envie ao menos um arquivo de observação')
+        nv = request.files.get('nav')
+        nav_txt = _texto(nv.read(), 'nav') if nv and nv.filename else None
+        fs = [teqc.carregar(x.read(), x.filename, nav_txt) for x in arqs]
+    except Exception as ex:
+        flash(f'Não foi possível ler os arquivos: {ex}')
+        return redirect(url_for('qc_index'))
+    sid = uuid.uuid4().hex[:8]
+    QC[sid] = {'fs': fs}
+    return redirect(url_for('qc_painel', sid=sid))
+
+
+@app.route('/qc/<sid>', methods=['GET', 'POST'])
+def qc_painel(sid):
+    S = QC.get(sid) or abort(404)
+    fm, fs = request.form, S['fs']
+    try:
+        par = dict(mask=float(fm.get('mask', 10)), iod=float(fm.get('iod', 400)), mp=float(fm.get('mp', 5)), arco=int(fm.get('arco', 20)))
+        idx = min(int(fm.get('arq', 0)), len(fs) - 1); f = fs[idx]
+        Rs = [teqc.analisar(x, par['mask'], par['iod'], par['mp'], par['arco']) for x in fs]; R = Rs[idx]
+        ns = np.isfinite(f['A'][:, :, 0]).sum(0)
+        sat = fm.get('sat') if fm.get('sat') in f['sats'] else f['sats'][int(np.argmax(ns))]
+        figs = teqc.graficos(f, R, sat, par['mask'])
+        res = dict(resumo=[teqc.linha_res(r) for r in Rs], sats=teqc.linhas_sat(R), figs=[(t, base64.b64encode(p).decode()) for t, p in figs],
+                   pngs=[p for _, p in figs], sat=sat, par=par, idx=idx, tem_el=R['tem_el'], nome=f"{f['estacao']} · {f['nome']}",
+                   info=dict(rec=f.get('rec') or '—', ant=f.get('ant') or '—'))
+    except Exception as ex:
+        flash(f'Erro no processamento: {ex}')
+        return redirect(url_for('qc_index'))
+    S['res'] = res
+    return render_template('qc.html', sid=sid, res=res, cab_res=teqc.CAB_RES, cab_sat=teqc.CAB_SAT,
+                           arqs=[(i, x['nome'], x['estacao']) for i, x in enumerate(fs)], sats=f['sats'])
+
+
+@app.route('/qc/<sid>/baixar/<what>')
+def qc_baixar(sid, what):
+    S = QC.get(sid) or abort(404); res = S.get('res') or abort(404)
+    if what in ('resumo', 'sats'):
+        cab, rows = (teqc.CAB_RES, res['resumo']) if what == 'resumo' else (teqc.CAB_SAT, res['sats'])
+        txt = ','.join(cab) + '\n' + '\n'.join(','.join(map(str, r)) for r in rows)
+        return send_file(io.BytesIO(txt.encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=f'qc_{what}.csv')
+    k = int(what[1:]) - 1 if what[:1] == 'g' and what[1:].isdigit() else None
+    if k is None or k >= len(res['pngs']):
+        abort(404)
+    return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'qc_grafico{k + 1}.png')
 
 
 if __name__ == '__main__':

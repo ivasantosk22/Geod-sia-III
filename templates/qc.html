@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Controle de qualidade (estilo TEQC)</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+<style>
+.tabs{display:flex;gap:12px;margin-top:16px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:12px;min-width:240px;padding:10px 22px 10px 14px;border-radius:14px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:28px;height:28px;flex:none}
+.tabs .tab .tt{line-height:1.25}
+.tabs .tab b{display:block;font-size:15px}
+.tabs .tab small{display:block;font-size:11.5px;opacity:.75}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tabs .tab.on small{opacity:.7}
+</style>
+</head><body>
+<header><h1>Controle de qualidade GNSS (estilo TEQC)</h1><span>Completude, multipath, SNR e saltos de ciclo · GPS L1/L2</span>
+<nav class="tabs"><a class="tab" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b><small>transmitidas × precisas (SP3)</small></div></a><a class="tab" href="/obs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis RINEX</b><small>qualidade L1/L2 · saltos de ciclo</small></div></a><a class="tab on" href="/qc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg><div class="tt"><b>Qualidade (TEQC)</b><small>completude · multipath · SNR</small></div></a></nav></header>
+<main>
+{% for m in get_flashed_messages() %}<div class="aviso erro">{{ m }}</div>{% endfor %}
+<section class="card"><details {{ 'open' if not sid }} class="kpinfo" style="background:#eef5fa;border-left:4px solid #12384f;border-radius:6px;padding:8px 14px">
+<summary><b>O que é o TEQC e o que esta aba calcula</b></summary>
+<p>O <b>TEQC</b> (<i>Translation, Editing and Quality Check</i>, da UNAVCO) é um programa clássico, executável, para tratar e checar a qualidade de dados GNSS. Esta aba reimplementa em Python a parte de <b>controle de qualidade (+qc)</b>, para GPS L1/L2:</p>
+<ul><li><b>Completude:</b> observações completas (fase L1 e L2 + código C1) ÷ esperadas acima da máscara de elevação. A elevação vem das efemérides transmitidas e da posição no cabeçalho do RINEX.</li>
+<li><b>Multipath MP1 e MP2:</b> RMS, após retirar o viés de cada arco contínuo (Estey &amp; Meertens, 1999).</li>
+<li><b>SNR médio</b> (SN1, SN2) e <b>saltos de ciclo</b>: variação brusca do atraso ionosférico (IOD) ou do multipath. <i>Obs. por salto</i> = observações completas ÷ saltos.</li></ul>
+<p><b>Atenção:</b> não é o executável original. Os números podem diferir levemente dos do TEQC, e os limiares de salto (IOD e MP) são valores adotados aqui e podem ser ajustados.</p></details></section>
+{% if not sid %}
+<section class="card"><h2>1. Carregar arquivos</h2>
+<form action="{{ url_for('qc_enviar') }}" method="post" enctype="multipart/form-data">
+<label>Arquivos de observação (.zip do IBGE, .d/.o, .gz): pode selecionar vários<input type="file" name="arquivos" multiple required></label>
+<label>Arquivo de navegação (opcional; se o .zip já tiver o .n, ele é usado sozinho)<input type="file" name="nav"></label>
+<p>Sem navegação não há elevação, então ficam indisponíveis a completude, o mapa do céu e as estatísticas acima da máscara.</p>
+<div class="acoes"><button>Processar</button></div></form></section>
+{% else %}
+<section class="card"><h2>2. Parâmetros</h2>
+<form method="post"><div class="grade">
+<label>Arquivo<select name="arq">{% for i,n,e in arqs %}<option value="{{ i }}" {{ 'selected' if i==res.idx }}>{{ e }} · {{ n }}</option>{% endfor %}</select></label>
+<label>Satélite (séries)<select name="sat">{% for s in sats %}<option {{ 'selected' if s==res.sat }}>{{ s }}</option>{% endfor %}</select></label>
+<label>Máscara de elevação (°)<input type="number" name="mask" step="1" min="0" max="45" value="{{ res.par.mask|int }}"></label>
+<label>Limiar de salto IOD (cm/min)<input type="number" name="iod" step="10" min="10" value="{{ res.par.iod|int }}"></label>
+<label>Limiar de salto MP (m)<input type="number" name="mp" step="0.5" min="0.5" value="{{ res.par.mp }}"></label>
+<label>Arco mínimo (épocas)<input type="number" name="arco" step="1" min="2" value="{{ res.par.arco }}"></label></div>
+{% if res.info %}<p>Receptor: <b>{{ res.info.rec }}</b> · Antena: <b>{{ res.info.ant }}</b></p>{% endif %}
+{% if not res.tem_el %}<div class="aviso">Sem arquivo de navegação para este arquivo: elevação, completude por elevação e mapa do céu indisponíveis.</div>{% endif %}
+<div class="acoes"><button>Atualizar</button><a class="btn sec" href="{{ url_for('qc_index') }}">Trocar arquivos</a></div></form></section>
+<section class="card"><h2>3. Resumo por arquivo</h2>
+<div class="rolar"><table><tr>{% for c in cab_res %}<th>{{ c }}</th>{% endfor %}</tr>
+{% for r in res.resumo %}<tr>{% for c in r %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+<h3>Por satélite — {{ res.nome }}</h3>
+<div class="rolar"><table><tr>{% for c in cab_sat %}<th>{{ c }}</th>{% endfor %}</tr>
+{% for r in res.sats %}<tr>{% for c in r %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+<div class="acoes"><a class="btn" href="{{ url_for('qc_baixar', sid=sid, what='resumo') }}">Baixar resumo (CSV)</a>
+<a class="btn" href="{{ url_for('qc_baixar', sid=sid, what='sats') }}">Baixar tabela por satélite (CSV)</a></div>
+{% for t,b in res.figs %}<h3>{{ t }}</h3><figure><img src="data:image/png;base64,{{ b }}" alt="{{ t }}">
+<a class="btn sec" href="{{ url_for('qc_baixar', sid=sid, what='g' ~ loop.index) }}">Baixar PNG</a></figure>{% endfor %}</section>
+{% endif %}
+</main></body></html>

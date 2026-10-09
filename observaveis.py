@@ -13,7 +13,8 @@ from nucleo import _png
 
 F1, F2, C = 1575.42e6, 1227.60e6, 299792458.0
 PREF = (['L1', 'L1C', 'L1W', 'L1P', 'L1X'], ['L2', 'L2W', 'L2P', 'L2C', 'L2X', 'L2L'],
-        ['P1', 'C1W', 'C1', 'C1C', 'C1P'], ['P2', 'C2W', 'C2P', 'C2', 'C2C', 'C2X', 'C2L'])
+        ['P1', 'C1W', 'C1', 'C1C', 'C1P'], ['P2', 'C2W', 'C2P', 'C2', 'C2C', 'C2X', 'C2L'],
+        ['S1', 'S1C', 'S1W', 'S1P', 'S1X'], ['S2', 'S2W', 'S2P', 'S2C', 'S2X', 'S2L'])
 
 
 def _eh_obs(b):
@@ -64,10 +65,17 @@ def ler_obs(txt):
     L = txt.split('\n')
     v3 = float(L[0][:9]) >= 3
     tipos, marker, i, ult = {}, '', 0, None
+    xyz, rec, ant = None, '', ''
     while 'END OF HEADER' not in L[i]:
         l, lab = L[i], L[i][60:].strip()
         if lab == 'MARKER NAME':
             marker = l[:60].strip()
+        elif lab == 'APPROX POSITION XYZ':
+            xyz = [float(l[k:k + 14]) for k in (0, 14, 28)]
+        elif lab == 'REC # / TYPE / VERS':
+            rec = l[20:40].strip()
+        elif lab == 'ANT # / TYPE':
+            ant = l[20:40].strip()
         elif v3 and lab == 'SYS / # / OBS TYPES':
             if l[0] != ' ':
                 ult = l[0]; tipos[ult] = []
@@ -126,7 +134,7 @@ def ler_obs(txt):
     A = np.stack([np.full(A.shape[:2], np.nan) if k is None else A[:, :, cols.index(k)] for k in esc], axis=2)
     t0 = ep[0]
     return dict(estacao=marker[:4].upper(), ep=ep, t=np.array([(x - t0).total_seconds() for x in ep]), sats=sats, A=A,
-                obs=[None if k is None else tg[k] for k in esc])
+                obs=[None if k is None else tg[k] for k in esc], xyz=xyz, rec=rec, ant=ant)
 
 
 def carregar(dados, nome):
