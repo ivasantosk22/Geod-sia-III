@@ -5,7 +5,10 @@ import base64, csv, gzip, io, os, re, threading, uuid, webbrowser, zipfile
 from datetime import datetime
 import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash
-import nucleo, observaveis, teqc
+import nucleo, observaveis
+import controle_qualidade as teqc
+import tempo as TEMPO, polo as POLO_M
+from datetime import date as _date
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
@@ -158,7 +161,7 @@ def obs_enviar():
         arqs = [x for x in request.files.getlist('arquivos') if x.filename]
         if not arqs:
             raise ValueError('envie ao menos um arquivo')
-        fs = [observaveis.carregar(x.read(), x.filename) for x in arqs]
+        fs = [f for x in arqs for f in observaveis.carregar_todos(x.read(), x.filename)]
     except Exception as ex:
         flash(f'Não foi possível ler os arquivos: {ex}')
         return redirect(url_for('obs_index'))
@@ -231,7 +234,7 @@ def qc_enviar():
             raise ValueError('envie ao menos um arquivo de observação')
         nv = request.files.get('nav')
         nav_txt = _texto(nv.read(), 'nav') if nv and nv.filename else None
-        fs = [teqc.carregar(x.read(), x.filename, nav_txt) for x in arqs]
+        fs = [f for x in arqs for f in teqc.carregar_todos(x.read(), x.filename, nav_txt)]
     except Exception as ex:
         flash(f'Não foi possível ler os arquivos: {ex}')
         return redirect(url_for('qc_index'))
@@ -273,6 +276,123 @@ def qc_baixar(sid, what):
     if k is None or k >= len(res['pngs']):
         abort(404)
     return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'qc_grafico{k + 1}.png')
+
+
+# ------------------------------------------------------------------ Sistemas de tempo (Aula 7)
+@app.route('/tempo', methods=['GET', 'POST'])
+def tempo_pagina():
+    ex = request.args.get('ex')
+    if ex:
+        e = TEMPO.EXEMPLO; v = dict(hl=e['hl'].strftime('%Y-%m-%dT%H:%M:%S'), fuso='3', dut1='0.4', tai='35')
+    elif request.method == 'POST':
+        v = dict(hl=request.form.get('hl', ''), fuso=request.form.get('fuso', '3'), dut1=request.form.get('dut1', '0'), tai=request.form.get('tai', ''))
+    else:
+        v = dict(hl=datetime.now().strftime('%Y-%m-%dT%H:%M:%S'), fuso='3', dut1='0', tai='')
+    res = erro = None
+    if ex or request.method == 'POST':
+        try:
+            hl = datetime.fromisoformat(v['hl']); fuso = float(v['fuso'].replace(',', '.')); info = []
+            dut1 = float(v['dut1'].replace(',', '.') or 0); tai = int(v['tai']) if v['tai'].strip() else None
+            bol = request.files.get('bol')
+            if bol and bol.filename and not ex:
+                dados = POLO_M.juntar([POLO_M.ler_boletim(bol.read().decode('latin-1'))])
+                mjd = TEMPO.calcular(hl, fuso, 0, tai or 35)['mjd']
+                u = POLO_M.ut1_utc_ms(dados, mjd)
+                if u is None:
+                    info.append('A data não está dentro do período do Boletim B enviado: DUT1 e TAI−UTC não foram alterados.')
+                else:
+                    dut1 = u / 1000; info.append(f'DUT1 = UT1−UTC = {dut1:+.6f} s, interpolado do Boletim B (valor das 0h UTC dos dias vizinhos).')
+                    tb = POLO_M.tai_utc_boletim(dados, int(mjd))
+                    if tb and tai is None:
+                        tai = tb; info.append(f'TAI−UTC = {tb} s, da seção 4 do Boletim B.')
+            r = TEMPO.calcular(hl, fuso, dut1, tai)
+            if tai is None and r['utc'].date() > _date(2026, 12, 31):
+                info.append('TAI−UTC = 37 s é o valor desde 2017. O Boletim C 72 (jul/2026) confirma que não haverá segundo intercalado até dez/2026; para datas posteriores, confirme no Boletim C.')
+            tab = TEMPO.tabela(r); check = None
+            if ex:
+                m = {a_: c for a_, b_, c in tab}
+                check = [(k, w, m[k], m[k] == w) for k, w in TEMPO.ESPERADO.items()]
+            res = dict(tab=tab, info=info, check=check)
+        except Exception as ex_:
+            erro = f'Não foi possível calcular: {ex_}'
+    return render_template('tempo.html', v=v, res=res, erro=erro, exemplo=bool(ex))
+
+
+# ------------------------------------------------------------------ Movimento do polo (Aula 4)
+POLO = {}
+
+
+def _textos_boletins(arq):
+    nome, b = arq.filename, arq.read()
+    if b[:2] == b'PK':
+        z = zipfile.ZipFile(io.BytesIO(b))
+        return [(n, z.read(n).decode('latin-1')) for n in z.namelist() if n.lower().endswith(('.txt', '.dat', '.csv'))]
+    return [(nome, b.decode('latin-1'))]
+
+
+@app.route('/polo')
+def polo_index():
+    return render_template('polo.html', sid=None, eventos=POLO_M.EVENTOS)
+
+
+@app.route('/polo/enviar', methods=['POST'])
+def polo_enviar():
+    try:
+        fm = request.form; evento = _date.fromisoformat(fm['evento']); meses = int(fm.get('meses', 6))
+        textos = [t for x in request.files.getlist('arquivos') if x.filename for t in _textos_boletins(x)]
+        if not textos and 'baixar' in fm:
+            nums = POLO_M.boletins_necessarios(POLO_M.soma_meses(evento, -meses), POLO_M.soma_meses(evento, meses))
+            ok_, erros = POLO_M.baixar_boletins(nums)
+            if erros:
+                raise ValueError('não consegui baixar os boletins do IERS (' + erros[0] + '). Baixe-os manualmente no IERS Data Center e envie os .txt aqui')
+            textos = [(f'bulletinb-{n}.txt', t) for n, t in ok_.items()]
+        if not textos:
+            raise ValueError('envie os boletins (.txt) ou marque a opção de baixar do IERS')
+        bs = [POLO_M.ler_boletim(t) for _, t in textos]
+        if not any(b['linhas'] for b in bs):
+            raise ValueError('não encontrei valores de xp e yp nos arquivos (formato de Boletim B ou série C04)')
+    except Exception as ex_:
+        flash(f'Não foi possível ler os boletins: {ex_}')
+        return redirect(url_for('polo_index'))
+    sid = uuid.uuid4().hex[:8]
+    POLO[sid] = dict(textos=textos, dados=POLO_M.juntar(bs), formatos=sorted({b['formato'] for b in bs}), evento=evento.isoformat(), meses=meses)
+    return redirect(url_for('polo_painel', sid=sid))
+
+
+@app.route('/polo/<sid>', methods=['GET', 'POST'])
+def polo_painel(sid):
+    S = POLO.get(sid) or abort(404); fm = request.form; D = S['dados']
+    par = dict(evento=fm.get('evento', S['evento']), meses=int(fm.get('meses', S['meses'])), ma=int(fm.get('ma', 7)))
+    res = erro = None
+    try:
+        ev = _date.fromisoformat(par['evento']); R = POLO_M.analisar(D, ev, par['meses'], par['ma']); figs = POLO_M.graficos(R)
+        res = dict(R=R, est=R['est'], ind=R['ind'], figs=[(t, base64.b64encode(p).decode()) for t, p in figs], pngs=[p for _, p in figs])
+        S['res'] = res; S['par'] = par
+    except Exception as ex_:
+        erro = str(ex_)
+    ev0 = _date.fromisoformat(par['evento'])
+    info = dict(n=len(D['mjd']), ini=POLO_M.mjd_data(D['mjd'][0]) if len(D['mjd']) else None, fim=POLO_M.mjd_data(D['mjd'][-1]) if len(D['mjd']) else None,
+                arquivos=len(S['textos']), formatos=', '.join(S['formatos']),
+                nec=POLO_M.boletins_necessarios(POLO_M.soma_meses(ev0, -par['meses']), POLO_M.soma_meses(ev0, par['meses'])))
+    return render_template('polo.html', sid=sid, res=res, erro=erro, par=par, info=info, cab_est=POLO_M.CAB_EST, eventos=POLO_M.EVENTOS)
+
+
+@app.route('/polo/<sid>/baixar/<what>')
+def polo_baixar(sid, what):
+    S = POLO.get(sid) or abort(404); res = S.get('res') or abort(404)
+    if what == 'csv':
+        return send_file(io.BytesIO(POLO_M.csv_polo(res['R']).encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name='movimento_polo.csv')
+    if what == 'boletins':
+        b = io.BytesIO()
+        with zipfile.ZipFile(b, 'w', zipfile.ZIP_DEFLATED) as z:
+            for n, t in S['textos']:
+                z.writestr(os.path.basename(n) or 'boletim.txt', t)
+        b.seek(0)
+        return send_file(b, mimetype='application/zip', as_attachment=True, download_name='boletins_IERS.zip')
+    k = int(what[1:]) - 1 if what[:1] == 'g' and what[1:].isdigit() else None
+    if k is None or k >= len(res['pngs']):
+        abort(404)
+    return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'polo_grafico{k + 1}.png')
 
 
 if __name__ == '__main__':

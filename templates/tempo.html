@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sistemas de tempo</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+<style>
+.tabs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:9px;min-width:0;padding:8px 12px 8px 10px;border-radius:14px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:23px;height:23px;flex:none}
+.tabs .tab .tt{line-height:1.25}
+.tabs .tab b{display:block;font-size:13.5px}
+.tabs .tab small{display:block;font-size:10.5px;opacity:.75}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tabs .tab.on small{opacity:.7}
+.tt3 th,.tt3 td{text-align:left;white-space:normal}.tt3 td:last-child{font-weight:600;white-space:nowrap}</style>
+</head><body>
+<header><h1>Sistemas de tempo</h1><span>UTC, UT1, TAI, TGPS, TT, TCG, Data Juliana e semana GPS · Aula 7</span>
+<nav class="tabs"><a class="tab" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b><small>transmitidas × precisas</small></div></a><a class="tab" href="/obs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis RINEX</b><small>L1/L2 · saltos de ciclo</small></div></a><a class="tab" href="/qc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg><div class="tt"><b>Qualidade (TEQC)</b><small>completude · multipath · SNR</small></div></a><a class="tab" href="/polo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18" opacity=".45"/><path d="M12 12c1.5-3 4.5-3.2 4.5-.5S13 14 12.2 11"/><circle cx="15" cy="9.5" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Movimento do polo</b><small>xp, yp · Boletim B (IERS)</small></div></a><a class="tab on" href="/tempo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2.2"/></svg><div class="tt"><b>Sistemas de tempo</b><small>UTC · UT1 · TAI · GPS · TT</small></div></a></nav></header>
+<main>
+{% for m in get_flashed_messages() %}<div class="aviso erro">{{ m }}</div>{% endfor %}
+
+<section class="card"><details open style="background:#eef5fa;border-left:4px solid #12384f;border-radius:6px;padding:8px 14px">
+<summary><b>O que esta aba calcula</b></summary>
+<p>Converte uma hora local para os sistemas de tempo da aula, com as mesmas equações: <b>UTC = HL + fuso</b>, <b>UT1 = UTC + DUT1</b>, <b>TAI = UTC + (TAI−UTC)</b>, <b>TGPS = TAI − 19 s</b>, <b>TT = TAI + 32,184 s</b>,
+e a <b>Data Juliana</b> (Leick, 1995), a <b>MJD</b>, a <b>semana</b> e o <b>dia da semana GPS</b>. O <b>DUT1</b> vem do boletim do IERS (Boletim A, B ou D); o <b>TAI−UTC</b> é preenchido pela tabela de segundos intercalados (37 s desde 2017).</p></details></section>
+<section class="card"><h2>1. Dados</h2>
+<form method="post" enctype="multipart/form-data"><div class="grade">
+<label>Hora local<input type="datetime-local" step="1" name="hl" value="{{ v.hl }}" required></label>
+<label>Fuso: horas a somar à hora local para obter UTC<input name="fuso" value="{{ v.fuso }}"></label>
+<label>DUT1 = UT1 − UTC (s)<input name="dut1" value="{{ v.dut1 }}"></label>
+<label>TAI − UTC (s): deixe vazio para usar a tabela<input name="tai" value="{{ v.tai }}"></label>
+<label>Boletim B do IERS (opcional): preenche DUT1 e TAI−UTC<input type="file" name="bol"></label></div>
+<div class="acoes"><button>Calcular</button><a class="btn sec" href="{{ url_for('tempo_pagina', ex=1) }}">Exemplo resolvido da aula</a></div></form></section>
+{% if erro %}<div class="aviso erro">{{ erro }}</div>{% endif %}
+{% if res %}<section class="card"><h2>2. Resultado{% if exemplo %} (exemplo da aula: Belém, 05/07/2012 09:10:20){% endif %}</h2>
+{% for i in res.info %}<div class="aviso">{{ i }}</div>{% endfor %}
+<div class="rolar"><table class="tt3"><tr><th>Sistema</th><th>Equação</th><th>Resultado</th></tr>
+{% for a,b,c in res.tab %}<tr><td>{{ a }}</td><td>{{ b }}</td><td>{{ c }}</td></tr>{% endfor %}</table></div>
+{% if res.check %}<h3>Conferência com a resposta do slide</h3>
+<table class="peq"><tr><th>Item</th><th>Aula</th><th>Sistema</th><th></th></tr>
+{% for k,w,m,ok in res.check %}<tr><td>{{ k }}</td><td>{{ w }}</td><td>{{ m }}</td><td>{{ '✔' if ok else '✘' }}</td></tr>{% endfor %}</table>
+<p><b>{{ 'Todos os valores coincidem com o exemplo resolvido da aula.' if res.check|selectattr(3)|list|length == res.check|length else 'Há diferenças em relação ao exemplo da aula.' }}</b></p>{% endif %}
+<p>Semana e dia GPS são calculados pela data em tempo GPS (a aula usa a data do JD em UTC; só diferem nos segundos finais antes da meia-noite).</p></section>{% endif %}
+
+</main></body></html>

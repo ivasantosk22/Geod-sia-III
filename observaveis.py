@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Qualidade das observáveis GPS L1/L2 (RINEX de observação da RBMC): combinações Lc, Lg, Pc,
 saltos de ciclo, disponibilidade. Aceita .zip do IBGE, .gz, CRINEX (Hatanaka) e RINEX 2/3."""
-import gzip, io, zipfile
+import gzip, io, re, zipfile
 from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.dates as mdates
@@ -36,21 +36,47 @@ def _achar(dados):
     return dados if _eh_obs(dados) else None
 
 
-def extrair(dados):
-    """Devolve o texto do RINEX de observação (descompacta gz, zip, zip aninhado e Hatanaka)."""
-    dados = _achar(dados)
-    if dados is None:
-        raise ValueError('não encontrei arquivo de observação (RINEX/CRINEX) no arquivo enviado')
+def _eh_nav(n, b):
+    return bool(re.search(r'\.(\d\d[nlp]|n|rnx)$', n, re.I)) and b[:2] not in (b'PK', b'\x1f\x8b') and b'NAV' in b[:600]
+
+
+def _varrer(dados, nome=''):
+    """Todos os arquivos de observação (e a navegação do mesmo zip), entrando em .zip/.gz aninhados."""
+    if dados[:2] == b'\x1f\x8b':
+        dados = gzip.decompress(dados)
+    if dados[:2] != b'PK':
+        return [dict(nome=nome, obs=dados, nav=None)] if _eh_obs(dados) else []
+    z = zipfile.ZipFile(io.BytesIO(dados)); itens, nav = [], None
+    for n in z.namelist():
+        b = z.read(n)
+        if _eh_nav(n, b):
+            nav = nav or b
+        else:
+            itens += _varrer(b, n)
+    for it in itens:
+        it['nav'] = it['nav'] or nav
+    return itens
+
+
+def _decodifica(dados):
     if b'CRINEX' in dados[:100]:
         try:
-            return crinex.crx2rnx(dados).replace('\r', '')          # Python puro (não depende de executáveis)
+            return crinex.crx2rnx(dados).replace('\r', '')              # Python puro (não depende de executáveis)
         except Exception as e:
-            try:                                                      # alternativa, se existir a biblioteca hatanaka
+            try:                                                          # alternativa, se existir a biblioteca hatanaka
                 import hatanaka
                 dados = hatanaka.decompress(dados)
             except Exception:
                 raise ValueError(f'não consegui descompactar o CRINEX (Hatanaka): {e}')
     return dados.decode('latin-1').replace('\r', '')
+
+
+def extrair(dados):
+    """Texto do primeiro RINEX de observação encontrado."""
+    it = _varrer(dados)
+    if not it:
+        raise ValueError('não encontrei arquivo de observação (RINEX/CRINEX) no arquivo enviado')
+    return _decodifica(it[0]['obs'])
 
 
 def _num(s):
@@ -135,6 +161,19 @@ def ler_obs(txt):
     t0 = ep[0]
     return dict(estacao=marker[:4].upper(), ep=ep, t=np.array([(x - t0).total_seconds() for x in ep]), sats=sats, A=A,
                 obs=[None if k is None else tg[k] for k in esc], xyz=xyz, rec=rec, ant=ant)
+
+
+def carregar_todos(dados, nome, com_nav=False):
+    """Um item por arquivo de observação (por dia/estação) dentro do arquivo enviado, ordenado por estação e data."""
+    its = _varrer(dados, nome)
+    if not its:
+        raise ValueError('não encontrei arquivo de observação (RINEX/CRINEX) no arquivo enviado')
+    fs = []
+    for it in its:
+        f = ler_obs(_decodifica(it['obs'])); f['nome'] = it['nome'] or nome
+        f['estacao'] = f['estacao'] or f['nome'][:4].upper(); f['nav_txt'] = it['nav'].decode('latin-1') if (com_nav and it['nav']) else None
+        fs.append(f)
+    return sorted(fs, key=lambda f: (f['estacao'], f['ep'][0]))
 
 
 def carregar(dados, nome):

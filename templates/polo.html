@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Movimento do polo</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+<style>
+.tabs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:9px;min-width:0;padding:8px 12px 8px 10px;border-radius:14px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:23px;height:23px;flex:none}
+.tabs .tab .tt{line-height:1.25}
+.tabs .tab b{display:block;font-size:13.5px}
+.tabs .tab small{display:block;font-size:10.5px;opacity:.75}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tabs .tab.on small{opacity:.7}
+</style>
+</head><body>
+<header><h1>Movimento do polo</h1><span>Coordenadas do polo (xp, yp) do IERS em torno de um evento · Aula 4</span>
+<nav class="tabs"><a class="tab" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b><small>transmitidas × precisas</small></div></a><a class="tab" href="/obs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis RINEX</b><small>L1/L2 · saltos de ciclo</small></div></a><a class="tab" href="/qc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg><div class="tt"><b>Qualidade (TEQC)</b><small>completude · multipath · SNR</small></div></a><a class="tab on" href="/polo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18" opacity=".45"/><path d="M12 12c1.5-3 4.5-3.2 4.5-.5S13 14 12.2 11"/><circle cx="15" cy="9.5" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Movimento do polo</b><small>xp, yp · Boletim B (IERS)</small></div></a><a class="tab" href="/tempo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2.2"/></svg><div class="tt"><b>Sistemas de tempo</b><small>UTC · UT1 · TAI · GPS · TT</small></div></a></nav></header>
+<main>
+{% for m in get_flashed_messages() %}<div class="aviso erro">{{ m }}</div>{% endfor %}
+
+<section class="card"><details {{ 'open' if not sid }} style="background:#eef5fa;border-left:4px solid #12384f;border-radius:6px;padding:8px 14px">
+<summary><b>O que é o movimento do polo e o que esta aba faz</b></summary>
+<p>O <b>movimento do polo</b> é a variação do eixo de rotação instantâneo da Terra em relação ao pólo convencional (CIO), descrita por <b>xp</b> e <b>yp</b>, em milissegundos de arco (mas). Vem do IERS (Boletim B, valores finais) e inclui o período de Chandler (~433 dias) e o movimento anual. Aqui, dado um evento (por exemplo, um terremoto), a aba usa de 6 meses antes a 6 meses depois e calcula, como na aula:</p>
+<ul><li><b>Coordenadas polares:</b> d = √(xp² + yp²) e θ = atan2(yp, xp), de modo que xp = d·cosθ e yp = d·senθ (atan2 resolve o quadrante).</li>
+<li><b>Distância linear:</b> d (mas) → radianos → metros com o raio médio (6371 km). Vale 1 mas ≈ 3,09 cm.</li>
+<li><b>Média móvel</b> e <b>variação diária</b>, comparação <b>antes × depois</b> e um <b>indicador de descontinuidade</b> no dia do evento.</li>
+<li><b>Gráficos:</b> xp e yp separados, trajetória xp × yp, polar (θ, d) e 3D (Z = tempo).</li></ul></details></section>
+{% if not sid %}
+<section class="card"><h2>1. Boletins do IERS</h2>
+<form action="{{ url_for('polo_enviar') }}" method="post" enctype="multipart/form-data">
+<label>Boletins B (.txt, ou um .zip com eles): pode selecionar vários<input type="file" name="arquivos" multiple></label>
+<div class="grade"><label>Evento (data do terremoto, UTC)<input type="date" id="evento" name="evento" required></label>
+<label>Exemplos (confira data e magnitude no catálogo do USGS)<select onchange="document.getElementById('evento').value=this.value"><option value="">escolher…</option>{% for n,d in eventos %}<option value="{{ d }}">{{ n }} · {{ d }}</option>{% endfor %}</select></label>
+<label>Meses antes e depois<input type="number" name="meses" value="6" min="1" max="24"></label></div>
+<label class="chk"><input type="checkbox" name="baixar"> Se eu não enviar arquivos, tentar baixar do IERS (precisa de internet)</label>
+<p>Os boletins B ficam no IERS Data Center (datacenter.iers.org). O valor final de um mês sai no boletim publicado dois meses depois. Depois de informar a data, a tela seguinte lista os números dos boletins necessários.</p>
+<div class="acoes"><button>Processar</button></div></form></section>
+{% else %}
+<section class="card"><h2>2. Parâmetros</h2>
+<p>Dados carregados: <b>{{ info.arquivos }}</b> arquivo(s), <b>{{ info.n }}</b> dias, de <b>{{ info.ini.strftime('%d/%m/%Y') if info.ini else '—' }}</b> a <b>{{ info.fim.strftime('%d/%m/%Y') if info.fim else '—' }}</b> ({{ info.formatos }}).
+Boletins necessários para esta janela: <b>bulletinb-{{ info.nec[0] }}.txt a bulletinb-{{ info.nec[-1] }}.txt</b>.</p>
+<form method="post"><div class="grade">
+<label>Evento (UTC)<input type="date" id="evento" name="evento" value="{{ par.evento }}" required></label>
+<label>Exemplos<select onchange="document.getElementById('evento').value=this.value"><option value="">escolher…</option>{% for n,d in eventos %}<option value="{{ d }}">{{ n }} · {{ d }}</option>{% endfor %}</select></label>
+<label>Meses antes e depois<input type="number" name="meses" value="{{ par.meses }}" min="1" max="24"></label>
+<label>Janela da média móvel (dias)<input type="number" name="ma" value="{{ par.ma }}" min="3" max="61"></label></div>
+<div class="acoes"><button>Atualizar</button><a class="btn sec" href="{{ url_for('polo_index') }}">Trocar boletins</a></div></form></section>
+{% if erro %}<div class="aviso erro">{{ erro }}</div>{% endif %}
+{% if res %}{% set R=res.R %}{% set i=res.ind %}
+<section class="card"><h2>3. Resultados</h2>
+<div class="chips"><span>Período <b>{{ R.ini.strftime('%d/%m/%Y') }} a {{ R.fim.strftime('%d/%m/%Y') }}</b></span><span>Dias <b>{{ R.n }}</b></span><span>Dia do evento <b>{{ i.dia_evento.strftime('%d/%m/%Y') }}</b></span>
+<span>Lacunas <b>{{ R.lacunas }}</b></span><span>Incerteza formal média (xp, yp) <b>{{ '%.3f'|format(i.xerr) }}, {{ '%.3f'|format(i.yerr) }} mas</b></span></div>
+<h3>Estatísticas antes × depois do evento</h3>
+<div class="rolar"><table><tr>{% for c in cab_est %}<th>{{ c }}</th>{% endfor %}</tr>{% for r in res.est %}<tr>{% for c in r %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+<h3>Indicador de descontinuidade no dia do evento</h3>
+<table class="peq"><tr><th>Grandeza</th><th>No evento (±2 d)</th><th>Restante da janela</th></tr>
+<tr><td>2ª diferença da posição (mas)</td><td>{{ '%.3f'|format(i.a_evento) }}</td><td>mediana {{ '%.3f'|format(i.a_mediana) }} · σ robusto {{ '%.3f'|format(i.a_sigma) }}</td></tr>
+<tr><td>Variação diária (mas/dia)</td><td>{{ '%.2f'|format(i.var_evento) }}</td><td>mediana {{ '%.2f'|format(i.var_mediana) }}</td></tr></table>
+<p><b>Razão = {{ '%.1f'|format(i.razao) }} σ.</b> A 2ª diferença é nula para um movimento suave, por isso um salto de posição no evento aparece como pico. Como regra prática, valores abaixo de ~3σ são compatíveis com a variação normal. Isto é um <b>indicador</b>, não uma prova de causa: o Boletim B é uma combinação suavizada, e passos de décimos de mas ficam abaixo do ruído da série (incerteza formal ≈ {{ '%.2f'|format(i.xerr) }} mas ≈ {{ '%.1f'|format(i.xerr * 0.0309) }} mm).</p>
+<div class="acoes"><a class="btn" href="{{ url_for('polo_baixar', sid=sid, what='csv') }}">Baixar tabela (CSV)</a><a class="btn" href="{{ url_for('polo_baixar', sid=sid, what='boletins') }}">Baixar os boletins (.zip)</a></div>
+{% for t,b in res.figs %}<h3>{{ t }}</h3><figure><img src="data:image/png;base64,{{ b }}" alt="{{ t }}"><a class="btn sec" href="{{ url_for('polo_baixar', sid=sid, what='g' ~ loop.index) }}">Baixar PNG</a></figure>{% endfor %}</section>
+{% endif %}{% endif %}
+
+</main></body></html>
