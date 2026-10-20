@@ -14,11 +14,12 @@ MU, WE = 3.986005e14, 7.2921151467e-5
 
 # ------------------------------------------------------------------ leitura (obs + navegação)
 def carregar_todos(dados, nome, nav_extra=None):
-    """Lê todos os dias/estações do arquivo enviado; usa a navegação do próprio zip ou a enviada à parte."""
+    """Lê todos os dias/estações do arquivo enviado; usa a navegação do próprio zip ou a(s) enviada(s) à parte (texto ou lista de textos)."""
     fs = O.carregar_todos(dados, nome, com_nav=True)
+    navs = [nav_extra] if isinstance(nav_extra, str) else list(nav_extra or [])
     for f in fs:
-        txt = nav_extra or f.pop('nav_txt', None); f.pop('nav_txt', None)
-        f['efs'] = [e for e in ler_nav(txt) if e.sat[0] == 'G'] if txt else []
+        txts = navs or ([f['nav_txt']] if f.get('nav_txt') else []); f.pop('nav_txt', None)
+        f['efs'] = [e for t in txts for e in ler_nav(t) if e.sat[0] == 'G']
     return fs
 
 

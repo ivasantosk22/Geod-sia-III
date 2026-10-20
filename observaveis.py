@@ -79,6 +79,9 @@ def extrair(dados):
     return _decodifica(it[0]['obs'])
 
 
+RE_EP2 = re.compile(r'^ \d\d [ \d]\d [ \d]\d [ \d]\d [ \d]\d [ \d]\d')
+
+
 def _num(s):
     s = s.strip()
     try:
@@ -132,11 +135,15 @@ def ler_obs(txt):
                 if s[0] == 'G':
                     regs.append((ei, s[:3].replace(' ', '0'), vals(s[3:])))
         else:
-            if len(l) < 32:
+            if not RE_EP2.match(l):                                  # não é linha de época: ignora
                 i += 1; continue
-            yy = int(l[1:3])
-            t = datetime(2000 + yy if yy < 80 else 1900 + yy, int(l[4:6]), int(l[7:9]), int(l[10:12]), int(l[13:15])) + timedelta(seconds=float(l[15:26]))
-            flag, ns = int(l[28:29]), int(l[29:32]); i += 1
+            try:
+                yy = int(l[1:3])
+                t = datetime(2000 + yy if yy < 80 else 1900 + yy, int(l[4:6]), int(l[7:9]), int(l[10:12]), int(l[13:15])) + timedelta(seconds=float(l[15:26]))
+                flag, ns = int(l[28:29].strip() or 0), int(l[29:32])
+            except ValueError as e:
+                raise ValueError(f'linha {i + 1} do RINEX (época): {e} | {l[:75]!r}')
+            i += 1
             sv = l[32:68]
             while len(sv) < 3 * ns:
                 sv += L[i][32:68]; i += 1

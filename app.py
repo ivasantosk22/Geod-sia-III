@@ -158,10 +158,14 @@ def obs_index():
 @app.route('/obs/enviar', methods=['POST'])
 def obs_enviar():
     try:
-        arqs = [x for x in request.files.getlist('arquivos') if x.filename]
+        arqs = []
+        for x in request.files.getlist('arquivos'):
+            b = x.read() if x.filename else b''
+            if x.filename and not (b[:2] not in (b'PK', b'\x1f\x8b') and b'NAV' in b[:600] and b'OBSERVATION DATA' not in b[:600]):   # ignora navegação
+                arqs.append((b, x.filename))
         if not arqs:
-            raise ValueError('envie ao menos um arquivo')
-        fs = [f for x in arqs for f in observaveis.carregar_todos(x.read(), x.filename)]
+            raise ValueError('envie ao menos um arquivo de observação')
+        fs = [f for b, n_ in arqs for f in observaveis.carregar_todos(b, n_)]
     except Exception as ex:
         flash(f'Não foi possível ler os arquivos: {ex}')
         return redirect(url_for('obs_index'))
@@ -229,12 +233,21 @@ def qc_index():
 @app.route('/qc/enviar', methods=['POST'])
 def qc_enviar():
     try:
-        arqs = [x for x in request.files.getlist('arquivos') if x.filename]
-        if not arqs:
-            raise ValueError('envie ao menos um arquivo de observação')
+        obs_, navs = [], []
+        for x in request.files.getlist('arquivos'):
+            if not x.filename:
+                continue
+            b = x.read()
+            if b[:2] not in (b'PK', b'\x1f\x8b') and b'NAV' in b[:600] and b'OBSERVATION DATA' not in b[:600]:
+                navs.append(_texto(b, 'nav'))                              # navegação enviada junto com a observação
+            else:
+                obs_.append((b, x.filename))
         nv = request.files.get('nav')
-        nav_txt = _texto(nv.read(), 'nav') if nv and nv.filename else None
-        fs = [f for x in arqs for f in teqc.carregar_todos(x.read(), x.filename, nav_txt)]
+        if nv and nv.filename:
+            navs.append(_texto(nv.read(), 'nav'))
+        if not obs_:
+            raise ValueError('envie ao menos um arquivo de observação (.o, .d, .zip ou .gz)')
+        fs = [f for b, n_ in obs_ for f in teqc.carregar_todos(b, n_, navs)]
     except Exception as ex:
         flash(f'Não foi possível ler os arquivos: {ex}')
         return redirect(url_for('qc_index'))
