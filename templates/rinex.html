@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Editar RINEX (corte, constelação e observáveis)</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+<style>
+.tabs{display:flex;gap:7px;margin-top:14px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:8px;padding:8px 13px 8px 10px;border-radius:12px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:21px;height:21px;flex:none}
+.tabs .tab .tt{line-height:1.2}
+.tabs .tab b{display:block;font-size:13px}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tt3 th,.tt3 td{text-align:left;white-space:normal}.tt3 td:last-child{font-weight:600;white-space:nowrap}
+.cx{background:#eef5fa;border-left:4px solid #12384f;border-radius:6px;padding:8px 14px}
+</style>
+</head><body>
+<header><h1>Editar RINEX (corte, constelação e observáveis)</h1><span>Equivalente ao teqc -st/-e, -R -E -C e -O.obs · Trabalho Prático II</span>
+<nav class="tabs"><a class="tab" href="/" title="Posição de satélites: efemérides transmitidas × precisas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b></div></a><a class="tab" href="/obs" title="Qualidade das observáveis L1/L2 e saltos de ciclo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis</b></div></a><a class="tab" href="/qc" title="Completude, multipath, SNR e saltos de ciclo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg><div class="tt"><b>Qualidade (TEQC)</b></div></a><a class="tab on" href="/rinex" title="Cortar sessões, filtrar GPS e L1/C1 (como o teqc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6.5" r="2.4"/><circle cx="6" cy="17.5" r="2.4"/><path d="M8 8l12 8M8 16L20 8"/></svg><div class="tt"><b>Editar RINEX</b></div></a><a class="tab" href="/ppp" title="Resultados do IBGE-PPP: σ3D, convergência, comparações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><div class="tt"><b>PPP (IBGE)</b></div></a><a class="tab" href="/polo" title="xp, yp a partir do Boletim B do IERS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18" opacity=".45"/><path d="M12 12c1.5-3 4.5-3.2 4.5-.5S13 14 12.2 11"/><circle cx="15" cy="9.5" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Movimento do polo</b></div></a><a class="tab" href="/tempo" title="UTC, UT1, TAI, TGPS, TT, Data Juliana, semana GPS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2.2"/></svg><div class="tt"><b>Sistemas de tempo</b></div></a></nav></header>
+<main>
+{% for m in get_flashed_messages() %}<div class="aviso erro">{{ m }}</div>{% endfor %}
+
+<section class="card"><details {{ 'open' if not sid }} class="cx">
+<summary><b>O que esta aba faz</b></summary>
+<p>Prepara os arquivos do trabalho de PPP sem usar o <code>teqc.exe</code>. A partir do RINEX de 2 h de cada cenário, gera:</p>
+<ul><li><b>Sessões de 5 min, 30 min, 1 h e 2 h</b> (equivale a <code>teqc -st … -e …</code>), a partir da primeira época ou de um horário que você escolher. Os limites são inclusivos e estão no tempo do próprio arquivo (GPS/UTC).</li>
+<li><b>Versão GPS com L1 e C1</b> (equivale a <code>teqc -R -E -C -O.obs L1,C1</code>): retira GLONASS, Galileo, BeiDou e SBAS e mantém só as observáveis escolhidas. Satélites sem dado nessas observáveis são removidos.</li>
+<li>Opcional: <b>versão GPS com L1/L2</b>, para comparar L1 pura × dupla frequência com a mesma constelação.</li></ul>
+<p>Os nomes de saída seguem o padrão do roteiro (ex.: <code>CEN1_30MIN.26o</code>, <code>CEN1_2H_L1_GPS.26o</code>), sem espaços nem caracteres especiais. Funciona com RINEX 2.xx (também descompacta Hatanaka). Os arquivos editados são conferidos relendo-os, mas confirme o resultado no seu processamento.</p></details></section>
+{% if not sid %}
+<section class="card"><h2>1. Arquivos e parâmetros</h2>
+<form action="{{ url_for('rinex_processar') }}" method="post" enctype="multipart/form-data">
+<label>RINEX de observação de 2 h (.26o, .zip ou .gz). Pode enviar os três cenários de uma vez; o prefixo vem do nome do arquivo<input type="file" name="arquivos" multiple required></label>
+<div class="grade">
+<label>Prefixo dos arquivos de saída (só vale para um arquivo; ex.: CEN1)<input name="prefixo" placeholder="vazio = usa o nome do arquivo"></label>
+<label>Início das sessões (no tempo do arquivo; vazio = 1ª época)<input type="datetime-local" step="1" name="inicio"></label>
+<label>Durações (minutos, separadas por vírgula)<input name="duracoes" value="5,30,60,120"></label>
+<label>Constelações mantidas nas versões filtradas (G = GPS)<input name="sistemas" value="G"></label>
+<label>Observáveis da versão L1<input name="tipos_l1" value="L1,C1"></label>
+<label>Modelo da antena no padrão IGS (opcional; ex.: TRM57971.00     NONE)<input name="antena" placeholder="vazio = mantém o do arquivo"></label>
+<label>Altura da antena em metros (opcional)<input name="altura" placeholder="vazio = mantém o do arquivo"></label></div>
+<p>O IBGE-PPP só aplica a correção do centro de fase da antena se o modelo estiver no padrão do IGS. Arquivos de conversores costumam trazer <code>UNKNOWN</code>; se for o seu caso, informe aqui o modelo (da caderneta de campo) e a altura, que são gravados no cabeçalho de todos os arquivos gerados.</p>
+<label class="chk"><input type="checkbox" name="completa" checked> Recorte completo, sem filtro (4 arquivos por cenário)</label>
+<label class="chk"><input type="checkbox" name="l1" checked> Versão GPS L1 + C1 (como o item 4.3 do roteiro)</label>
+<label class="chk"><input type="checkbox" name="dupla"> Versão GPS L1/L2 (para comparar com a L1 pura)</label>
+<div class="acoes"><button>Gerar arquivos</button></div></form></section>
+{% else %}
+<section class="card"><h2>2. Arquivos de entrada</h2>
+<div class="rolar"><table><tr><th>Arquivo</th><th>Épocas</th><th>Primeira época</th><th>Última época</th><th>Intervalo (s)</th><th>Observáveis</th></tr>
+{% for e in entradas %}<tr><td>{{ e.nome }}</td><td>{{ e.n }}</td><td>{{ e.ini.strftime('%d/%m/%Y %H:%M:%S') }}</td><td>{{ e.fim.strftime('%d/%m/%Y %H:%M:%S') }}</td><td>{{ '%g'|format(e.passo) }}</td><td>{{ e.tipos }}</td></tr>{% endfor %}</table></div></section>
+<section class="card"><h2>3. Arquivos gerados ({{ linhas|length }})</h2>
+<div class="acoes"><a class="btn" href="{{ url_for('rinex_baixar', sid=sid, nome='todos.zip') }}">Baixar todos (.zip)</a><a class="btn sec" href="{{ url_for('rinex_index') }}">Novo processamento</a></div>
+<div class="rolar"><table><tr><th>Arquivo</th><th>Descrição</th><th>Épocas</th><th>Início</th><th>Fim</th><th>Satélites</th><th>Observáveis</th><th>KB</th><th></th></tr>
+{% for l in linhas %}<tr><td>{{ l.nome }}</td><td>{{ l.desc }}</td><td>{{ l.ep }}</td><td>{{ l.ini.strftime('%H:%M:%S') }}</td><td>{{ l.fim.strftime('%H:%M:%S') }}</td><td>{{ l.sats }}</td><td>{{ l.tipos }}</td><td>{{ '%.0f'|format(l.kb) }}</td>
+<td><a href="{{ url_for('rinex_baixar', sid=sid, nome=l.nome) }}">baixar</a></td></tr>{% endfor %}</table></div>
+<p>Próximo passo do roteiro: enviar cada arquivo ao IBGE-PPP (modo estático, altura e modelo da antena da caderneta) e, quando receber os resultados, abrir a aba <b>PPP (IBGE)</b>.</p></section>
+{% endif %}
+
+</main></body></html>

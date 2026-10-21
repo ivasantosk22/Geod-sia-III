@@ -7,11 +7,22 @@ import numpy as np
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash
 import nucleo, observaveis
 import controle_qualidade as teqc
-import tempo as TEMPO, polo as POLO_M
+import tempo as TEMPO, polo as POLO_M, rinex_edit as RE, ppp as PPP
 from datetime import date as _date
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+import modelos
+modelos.sincronizar(BASE)                      # recria telas ausentes, vazias ou antigas
 app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True      # usa o arquivo .html novo sem precisar reiniciar o servidor
+app.jinja_env.auto_reload = True
+
+
+@app.after_request
+def sem_cache(r):                               # o navegador não guarda páginas (evita tela em branco antiga)
+    if r.mimetype == 'text/html':
+        r.headers['Cache-Control'] = 'no-store'
+    return r
 app.secret_key = 'local'
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 SESSOES = {}
@@ -264,12 +275,25 @@ def qc_painel(sid):
         par = dict(mask=float(fm.get('mask', 10)), iod=float(fm.get('iod', 400)), mp=float(fm.get('mp', 5)), arco=int(fm.get('arco', 20)))
         idx = min(int(fm.get('arq', 0)), len(fs) - 1); f = fs[idx]
         Rs = [teqc.analisar(x, par['mask'], par['iod'], par['mp'], par['arco']) for x in fs]; R = Rs[idx]
+        ov = S.setdefault('over', {})
+        if request.method == 'POST' and 'rec_nome' in fm:                         # nomes digitados pelo usuário (valem para o arquivo escolhido)
+            ov[idx] = dict(rec=fm.get('rec_nome', '').strip(), ant=fm.get('ant_nome', '').strip())
+
+        def ident(i, ff):
+            h, o_ = ff.get('hdr') or {}, ov.get(i, {})
+            vazio = lambda t: (t or '').strip().lower() in ('', 'unknown', 'unknown ext', 'unknown ext.', 'none')
+            rec, ant = o_.get('rec') or h.get('rec') or '', o_.get('ant') or h.get('ant') or ''
+            d = h.get('delta')
+            return dict(rec=rec or '—', ant=ant or '—', rec_num=h.get('rec_num') or '—', rec_ver=h.get('rec_ver') or '—', ant_num=h.get('ant_num') or '—',
+                        observador=' / '.join(x for x in (h.get('observador'), h.get('agencia')) if x) or '—', pgm=h.get('pgm') or '—',
+                        altura=f'{d[0]:.4f} m' if d else '—', vazio_rec=vazio(rec), vazio_ant=vazio(ant),
+                        dig_rec=o_.get('rec', ''), dig_ant=o_.get('ant', ''))
         ns = np.isfinite(f['A'][:, :, 0]).sum(0)
         sat = fm.get('sat') if fm.get('sat') in f['sats'] else f['sats'][int(np.argmax(ns))]
         figs = teqc.graficos(f, R, sat, par['mask'])
         res = dict(resumo=[teqc.linha_res(r) for r in Rs], sats=teqc.linhas_sat(R), figs=[(t, base64.b64encode(p).decode()) for t, p in figs],
                    pngs=[p for _, p in figs], sat=sat, par=par, idx=idx, tem_el=R['tem_el'], nome=f"{f['estacao']} · {f['nome']}",
-                   info=dict(rec=f.get('rec') or '—', ant=f.get('ant') or '—'))
+                   info=ident(idx, f), rec_ant=[(ident(i, x)['rec'], ident(i, x)['ant']) for i, x in enumerate(fs)])
     except Exception as ex:
         flash(f'Erro no processamento: {ex}')
         return redirect(url_for('qc_index'))
@@ -282,7 +306,7 @@ def qc_painel(sid):
 def qc_baixar(sid, what):
     S = QC.get(sid) or abort(404); res = S.get('res') or abort(404)
     if what in ('resumo', 'sats'):
-        cab, rows = (teqc.CAB_RES, res['resumo']) if what == 'resumo' else (teqc.CAB_SAT, res['sats'])
+        cab, rows = ((teqc.CAB_RES + ['Receptor', 'Antena'], [r + list(ra) for r, ra in zip(res['resumo'], res['rec_ant'])]) if what == 'resumo' else (teqc.CAB_SAT, res['sats']))
         txt = ','.join(cab) + '\n' + '\n'.join(','.join(map(str, r)) for r in rows)
         return send_file(io.BytesIO(txt.encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=f'qc_{what}.csv')
     k = int(what[1:]) - 1 if what[:1] == 'g' and what[1:].isdigit() else None
@@ -406,6 +430,144 @@ def polo_baixar(sid, what):
     if k is None or k >= len(res['pngs']):
         abort(404)
     return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'polo_grafico{k + 1}.png')
+
+
+# ------------------------------------------------------------------ Editar RINEX (equivalente ao teqc -st/-e, -R -E -C, -O.obs)
+RIN = {}
+
+
+@app.route('/rinex')
+def rinex_index():
+    return render_template('rinex.html', sid=None)
+
+
+@app.route('/rinex/processar', methods=['POST'])
+def rinex_processar():
+    try:
+        fm = request.form; arquivos = [(x.filename, x.read()) for x in request.files.getlist('arquivos') if x.filename]
+        if not arquivos:
+            raise ValueError('envie ao menos um arquivo de observação (.26o, .zip ou .gz)')
+        durs = [float(v.replace(',', '.')) for v in re.split(r'[;, ]+', fm.get('duracoes', '5,30,60,120').strip()) if v]
+        if not durs:
+            raise ValueError('informe as durações em minutos (ex.: 5,30,60,120)')
+        inicio = datetime.fromisoformat(fm['inicio']) if fm.get('inicio') else None
+        sist = ''.join(c for c in fm.get('sistemas', 'G').upper() if c.isalpha()) or 'G'
+        tipos = tuple(t.strip().upper() for t in fm.get('tipos_l1', 'L1,C1').split(',') if t.strip())
+        antena = fm.get('antena', '').strip() or None; altura = float(fm['altura'].replace(',', '.')) if fm.get('altura', '').strip() else None
+        saidas, entradas = {}, []
+        its = [(n, it) for n, b in arquivos for it in observaveis._varrer(b, n)]
+        if not its:
+            raise ValueError('não encontrei RINEX de observação nos arquivos enviados')
+        for n, it in its:
+            txt = observaveis._decodifica(it['obs']); base = re.sub(r'\.[A-Za-z0-9]+$', '', os.path.basename(it['nome'] or n))
+            pref = RE.nome_seguro(fm['prefixo']) if (fm.get('prefixo') and len(its) == 1) else RE.nome_seguro(re.sub(r'[_\-]?2H$', '', base, flags=re.I))
+            R0 = RE.ler(txt); ep = R0['ep']
+            m = re.search(r'\.(\d\d)[oOdD]$', it['nome'] or n); ext = (m[1] if m else f'{ep[0]["t"].year % 100:02d}') + 'o'
+            entradas.append(dict(nome=base, n=len(ep), ini=ep[0]['t'], fim=ep[-1]['t'], tipos=' '.join(R0['tipos']),
+                                 passo=RE.np_median([(b_['t'] - a_['t']).total_seconds() for a_, b_ in zip(ep, ep[1:])]) if len(ep) > 1 else 0))
+            for nome, saida, est, desc in RE.sessoes(txt, pref, ext, inicio, durs, 'completa' in fm, 'l1' in fm, 'dupla' in fm, sist, tipos, antena, altura):
+                saidas[nome] = (saida.encode('latin-1', 'replace'), est, desc)
+        if not saidas:
+            raise ValueError('escolha ao menos uma variante de saída')
+    except Exception as ex:
+        flash(f'Não foi possível processar: {ex}')
+        return redirect(url_for('rinex_index'))
+    sid = uuid.uuid4().hex[:8]; RIN[sid] = dict(arqs=saidas, entradas=entradas)
+    return redirect(url_for('rinex_painel', sid=sid))
+
+
+@app.route('/rinex/<sid>')
+def rinex_painel(sid):
+    S = RIN.get(sid) or abort(404)
+    linhas = [dict(nome=n, desc=d, ep=e['epocas'], ini=e['inicio'], fim=e['fim'], sats=e['satelites'], tipos=' '.join(e['tipos']), kb=len(b) / 1024)
+              for n, (b, e, d) in S['arqs'].items()]
+    return render_template('rinex.html', sid=sid, linhas=linhas, entradas=S['entradas'])
+
+
+@app.route('/rinex/<sid>/baixar/<nome>')
+def rinex_baixar(sid, nome):
+    S = RIN.get(sid) or abort(404)
+    if nome == 'todos.zip':
+        b = io.BytesIO()
+        with zipfile.ZipFile(b, 'w', zipfile.ZIP_DEFLATED) as z:
+            for n, (c, _, _) in S['arqs'].items():
+                z.writestr(n, c)
+        b.seek(0)
+        return send_file(b, mimetype='application/zip', as_attachment=True, download_name='rinex_editados.zip')
+    if nome not in S['arqs']:
+        abort(404)
+    return send_file(io.BytesIO(S['arqs'][nome][0]), mimetype='text/plain', as_attachment=True, download_name=nome)
+
+
+# ------------------------------------------------------------------ PPP (IBGE): leitura dos resultados
+PPP_S = {}
+
+
+@app.route('/ppp')
+def ppp_index():
+    return render_template('ppp.html', sid=None)
+
+
+@app.route('/ppp/enviar', methods=['POST'])
+def ppp_enviar():
+    try:
+        arqs = [(x.filename, x.read()) for x in request.files.getlist('arquivos') if x.filename]
+        itens = PPP.carregar(arqs) if arqs else []
+        if request.form.get('manual', '').strip():
+            itens += PPP.manual(request.form['manual'])
+        if not itens:
+            raise ValueError('envie os .zip do IBGE-PPP (ou os .sum/.pos) ou preencha a tabela manual')
+    except Exception as ex:
+        flash(f'Não foi possível ler: {ex}')
+        return redirect(url_for('ppp_index'))
+    sid = uuid.uuid4().hex[:8]; PPP_S[sid] = dict(itens=itens)
+    return redirect(url_for('ppp_painel', sid=sid))
+
+
+@app.route('/ppp/<sid>', methods=['GET', 'POST'])
+def ppp_painel(sid):
+    S = PPP_S.get(sid) or abort(404); itens = S['itens']; fm = request.form
+    if request.method == 'POST':
+        for i, it in enumerate(itens):
+            try:
+                it['rot'] = dict(cen=int(fm[f'cen{i}']) if fm.get(f'cen{i}') else None, dur=float(fm[f'dur{i}'].replace(',', '.')) if fm.get(f'dur{i}') else None,
+                                 modo=fm.get(f'modo{i}') or None)
+            except ValueError:
+                flash(f'duração inválida na linha {i + 1}')
+    L = PPP.linhas(itens)
+    com_pos = [i for i, it in enumerate(itens) if it['pos']]
+    curva = int(fm.get('curva', com_pos[0] if com_pos else 0)) if itens else 0
+    figs = PPP.graficos(L, curva if com_pos else None, itens)
+    S['res'] = dict(L=L, pngs=[p for _, p in figs])
+    return render_template('ppp.html', sid=sid, itens=itens, tab=PPP.tabela(L), cab=PPP.CAB, figs=[(t, base64.b64encode(p).decode()) for t, p in figs],
+                           com_pos=com_pos, curva=curva)
+
+
+@app.route('/ppp/<sid>/baixar/<what>')
+def ppp_baixar(sid, what):
+    S = PPP_S.get(sid) or abort(404); res = S.get('res') or abort(404)
+    if what == 'csv':
+        return send_file(io.BytesIO(PPP.csv_ppp(res['L']).encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name='ppp_resultados.csv')
+    k = int(what[1:]) - 1 if what[:1] == 'g' and what[1:].isdigit() else None
+    if k is None or k >= len(res['pngs']):
+        abort(404)
+    return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'ppp_grafico{k + 1}.png')
+
+
+@app.route('/diagnostico')
+def diagnostico():
+    import sys, importlib
+    L = [f'Python {sys.version.split()[0]}', f'Pasta do sistema: {BASE}', '']
+    for n in modelos.TEMPLATES:
+        p = os.path.join(BASE, 'templates', n + '.html'); tam = os.path.getsize(p) if os.path.exists(p) else -1
+        L.append(f'templates/{n}.html: {tam} bytes  ' + ('OK' if tam > 1000 else 'PROBLEMA (vazio ou ausente)'))
+    L.append('')
+    for m in ('nucleo', 'observaveis', 'controle_qualidade', 'crinex', 'tempo', 'polo', 'rinex_edit', 'ppp'):
+        try:
+            L.append(f'{m}.py: OK ({os.path.basename(importlib.import_module(m).__file__)})')
+        except Exception as e:
+            L.append(f'{m}.py: PROBLEMA ({e})')
+    return '<pre style="font:14px monospace;padding:20px">' + '\n'.join(L) + '</pre>'
 
 
 if __name__ == '__main__':

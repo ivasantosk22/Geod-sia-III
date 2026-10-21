@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PPP (IBGE): resultados e comparações</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+<style>
+.tabs{display:flex;gap:7px;margin-top:14px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:8px;padding:8px 13px 8px 10px;border-radius:12px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:21px;height:21px;flex:none}
+.tabs .tab .tt{line-height:1.2}
+.tabs .tab b{display:block;font-size:13px}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tt3 th,.tt3 td{text-align:left;white-space:normal}.tt3 td:last-child{font-weight:600;white-space:nowrap}
+.cx{background:#eef5fa;border-left:4px solid #12384f;border-radius:6px;padding:8px 14px}
+</style>
+</head><body>
+<header><h1>PPP (IBGE): resultados e comparações</h1><span>σ3D, tempo de convergência e gráficos do Trabalho Prático II</span>
+<nav class="tabs"><a class="tab" href="/" title="Posição de satélites: efemérides transmitidas × precisas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b></div></a><a class="tab" href="/obs" title="Qualidade das observáveis L1/L2 e saltos de ciclo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis</b></div></a><a class="tab" href="/qc" title="Completude, multipath, SNR e saltos de ciclo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg><div class="tt"><b>Qualidade (TEQC)</b></div></a><a class="tab" href="/rinex" title="Cortar sessões, filtrar GPS e L1/C1 (como o teqc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6.5" r="2.4"/><circle cx="6" cy="17.5" r="2.4"/><path d="M8 8l12 8M8 16L20 8"/></svg><div class="tt"><b>Editar RINEX</b></div></a><a class="tab on" href="/ppp" title="Resultados do IBGE-PPP: σ3D, convergência, comparações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><div class="tt"><b>PPP (IBGE)</b></div></a><a class="tab" href="/polo" title="xp, yp a partir do Boletim B do IERS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18" opacity=".45"/><path d="M12 12c1.5-3 4.5-3.2 4.5-.5S13 14 12.2 11"/><circle cx="15" cy="9.5" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Movimento do polo</b></div></a><a class="tab" href="/tempo" title="UTC, UT1, TAI, TGPS, TT, Data Juliana, semana GPS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2.2"/></svg><div class="tt"><b>Sistemas de tempo</b></div></a></nav></header>
+<main>
+{% for m in get_flashed_messages() %}<div class="aviso erro">{{ m }}</div>{% endfor %}
+
+<section class="card"><details {{ 'open' if not sid }} class="cx">
+<summary><b>O que esta aba faz</b></summary>
+<p>O processamento do <b>IBGE-PPP</b> é feito no portal do IBGE (com seu e-mail) e não pode ser automatizado. Esta aba <b>lê o resultado</b> que o IBGE devolve (o .zip, ou os arquivos .sum e .pos) e faz a parte analítica do roteiro:</p>
+<ul><li><b>σ3D = √(σφ² + σλ² + σh²)</b>, com os sigmas da seção 3.3 do arquivo .sum.</li>
+<li><b>Tempo de convergência</b>, calculado no .pos (σ3D menor que 1 m e menor que 0,1 m, e permanecendo assim) e as <b>curvas de desvio padrão e de convergência</b> época a época, equivalentes aos gráficos do PDF.</li>
+<li><b>Gráficos comparativos:</b> tempo de rastreio × sigmas para cada cenário e L1 pura × L1/L2.</li></ul>
+<p>Nomeie os arquivos de entrada de forma que o sistema reconheça o cenário e a duração, por exemplo <code>CEN1_30MIN</code> e <code>CEN1_30MIN_L1_GPS</code>; tudo pode ser corrigido na tabela da tela seguinte. O modo (L1 ou L1/L2) vem do próprio .sum.</p>
+<p><b>Atenção:</b> o leitor segue o formato descrito no manual do IBGE-PPP. Se algum campo não for reconhecido, digite os valores na tabela manual abaixo; o gráfico de convergência depende do .pos.</p></details></section>
+{% if not sid %}
+<section class="card"><h2>1. Resultados do IBGE-PPP</h2>
+<form action="{{ url_for('ppp_enviar') }}" method="post" enctype="multipart/form-data">
+<label>Arquivos .zip do IBGE-PPP (ou .sum e .pos): selecione todos de uma vez<input type="file" name="arquivos" multiple></label>
+<label>Ou digite manualmente (uma linha por processamento: <code>cenário;duração em min;modo;σφ;σλ;σh;convergência em min (opcional)</code>)
+<textarea name="manual" rows="5" style="width:100%;margin-top:4px;padding:8px;border:1px solid #c5ccd6;border-radius:6px;font:13px monospace" placeholder="1;30;L1/L2;0,0120;0,0150;0,0400;12&#10;1;30;L1;0,35;0,42;0,90"></textarea></label>
+<div class="acoes"><button>Ler resultados</button></div></form></section>
+{% else %}
+<section class="card"><h2>2. Identificação de cada processamento</h2>
+<form method="post"><div class="rolar"><table><tr><th>Arquivo</th><th>Cenário</th><th>Duração (min)</th><th>Modo</th><th>Leitura</th></tr>
+{% for it in itens %}{% set i = loop.index0 %}<tr><td>{{ it.nome }}</td>
+<td><select name="cen{{ i }}"><option value="">—</option>{% for c in (1,2,3) %}<option value="{{ c }}" {{ 'selected' if it.rot.cen==c }}>{{ c }}</option>{% endfor %}</select></td>
+<td><input name="dur{{ i }}" value="{{ '%g'|format(it.rot.dur) if it.rot.dur else '' }}" style="width:90px"></td>
+<td><select name="modo{{ i }}"><option value="">—</option>{% for m in ('L1/L2','L1') %}<option {{ 'selected' if it.rot.modo==m }}>{{ m }}</option>{% endfor %}</select></td>
+<td style="text-align:left;white-space:normal">{% if it.erro %}<span style="color:#b71c1c">{{ it.erro }}</span>{% else %}.sum {{ 'ok' if it.sum else '—' }} · .pos {{ 'ok (' ~ it.pos.n ~ ' épocas)' if it.pos else '—' }}{% endif %}</td></tr>{% endfor %}</table></div>
+{% if com_pos %}<label style="margin-top:10px">Processamento para as curvas época a época<select name="curva">{% for i in com_pos %}<option value="{{ i }}" {{ 'selected' if i==curva }}>{{ itens[i].nome }}</option>{% endfor %}</select></label>{% endif %}
+<div class="acoes"><button>Atualizar</button><a class="btn sec" href="{{ url_for('ppp_index') }}">Novos arquivos</a></div></form></section>
+<section class="card"><h2>3. Resultados</h2>
+<div class="rolar"><table><tr>{% for c in cab %}<th>{{ c }}</th>{% endfor %}</tr>{% for r in tab %}<tr>{% for c in r %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+<div class="acoes"><a class="btn" href="{{ url_for('ppp_baixar', sid=sid, what='csv') }}">Baixar tabela (CSV)</a></div>
+<p>σ3D e σ plan. usam os sigmas do relatório (seção 3.3 do .sum). Como o próprio IBGE ressalta, o desvio padrão é um indicador otimista; no relatório, compare também com a diferença para uma coordenada conhecida, se houver.</p>
+{% for t,b in figs %}<h3>{{ t }}</h3><figure><img src="data:image/png;base64,{{ b }}" alt="{{ t }}"><a class="btn sec" href="{{ url_for('ppp_baixar', sid=sid, what='g' ~ loop.index) }}">Baixar PNG</a></figure>{% endfor %}</section>
+{% endif %}
+
+</main></body></html>

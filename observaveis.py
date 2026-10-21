@@ -95,16 +95,26 @@ def ler_obs(txt):
     v3 = float(L[0][:9]) >= 3
     tipos, marker, i, ult = {}, '', 0, None
     xyz, rec, ant = None, '', ''
+    hdr = dict(rec='', rec_num='', rec_ver='', ant='', ant_num='', observador='', agencia='', delta=None, pgm='', marker='')
     while 'END OF HEADER' not in L[i]:
         l, lab = L[i], L[i][60:].strip()
         if lab == 'MARKER NAME':
-            marker = l[:60].strip()
+            marker = l[:60].strip(); hdr['marker'] = marker
         elif lab == 'APPROX POSITION XYZ':
             xyz = [float(l[k:k + 14]) for k in (0, 14, 28)]
         elif lab == 'REC # / TYPE / VERS':
-            rec = l[20:40].strip()
+            rec = l[20:40].strip(); hdr.update(rec=rec, rec_num=l[:20].strip(), rec_ver=l[40:60].strip())
         elif lab == 'ANT # / TYPE':
-            ant = l[20:40].strip()
+            ant = l[20:40].strip(); hdr.update(ant=ant, ant_num=l[:20].strip())
+        elif lab == 'OBSERVER / AGENCY':
+            hdr.update(observador=l[:20].strip(), agencia=l[20:60].strip())
+        elif lab == 'ANTENNA: DELTA H/E/N':
+            try:
+                hdr['delta'] = [float(l[k:k + 14]) for k in (0, 14, 28)]
+            except ValueError:
+                pass
+        elif lab == 'PGM / RUN BY / DATE':
+            hdr['pgm'] = l[:20].strip()
         elif v3 and lab == 'SYS / # / OBS TYPES':
             if l[0] != ' ':
                 ult = l[0]; tipos[ult] = []
@@ -167,7 +177,7 @@ def ler_obs(txt):
     A = np.stack([np.full(A.shape[:2], np.nan) if k is None else A[:, :, cols.index(k)] for k in esc], axis=2)
     t0 = ep[0]
     return dict(estacao=marker[:4].upper(), ep=ep, t=np.array([(x - t0).total_seconds() for x in ep]), sats=sats, A=A,
-                obs=[None if k is None else tg[k] for k in esc], xyz=xyz, rec=rec, ant=ant)
+                obs=[None if k is None else tg[k] for k in esc], xyz=xyz, rec=rec, ant=ant, hdr=hdr)
 
 
 def carregar_todos(dados, nome, com_nav=False):
