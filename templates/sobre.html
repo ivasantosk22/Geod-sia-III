@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sobre o sistema</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+<style>
+.tabs{display:flex;gap:7px;margin-top:14px;flex-wrap:wrap}
+.tabs .tab{display:flex;align-items:center;gap:8px;padding:8px 13px 8px 10px;border-radius:12px;text-decoration:none;color:#cfe3ee;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);transition:all .15s}
+.tabs .tab:hover{background:rgba(255,255,255,.17);color:#fff;transform:translateY(-1px)}
+.tabs .tab svg{width:21px;height:21px;flex:none}
+.tabs .tab .tt{line-height:1.2}
+.tabs .tab b{display:block;font-size:13px}
+.tabs .tab.on{background:#fff;color:#12384f;border-color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.tt3 th,.tt3 td{text-align:left;white-space:normal}.tt3 td:last-child{font-weight:600;white-space:nowrap}
+.cx{background:#eef5fa;border-left:4px solid #12384f;border-radius:6px;padding:8px 14px}
+</style>
+</head><body>
+<header><h1>Sobre o sistema</h1><span>Autoria, instituição e módulos</span>
+<nav class="tabs"><a class="tab" href="/" title="Posição de satélites: efemérides transmitidas × precisas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(-30 12 12)"/><circle cx="19.2" cy="7.8" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Efemérides</b></div></a><a class="tab" href="/obs" title="Qualidade das observáveis L1/L2 e saltos de ciclo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3.5l2.5-7 4 14 3-10 2 3H22"/></svg><div class="tt"><b>Observáveis</b></div></a><a class="tab" href="/qc" title="Completude, multipath, SNR e saltos de ciclo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M8.5 12.2l2.5 2.5 4.5-5"/></svg><div class="tt"><b>Qualidade (TEQC)</b></div></a><a class="tab" href="/rinex" title="Cortar sessões, filtrar GPS e L1/C1 (como o teqc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6.5" r="2.4"/><circle cx="6" cy="17.5" r="2.4"/><path d="M8 8l12 8M8 16L20 8"/></svg><div class="tt"><b>Editar RINEX</b></div></a><a class="tab" href="/ppp" title="Resultados do IBGE-PPP: σ3D, convergência, comparações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg><div class="tt"><b>PPP (IBGE)</b></div></a><a class="tab" href="/polo" title="xp, yp a partir do Boletim B do IERS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18" opacity=".45"/><path d="M12 12c1.5-3 4.5-3.2 4.5-.5S13 14 12.2 11"/><circle cx="15" cy="9.5" r="1.3" fill="currentColor"/></svg><div class="tt"><b>Movimento do polo</b></div></a><a class="tab" href="/tempo" title="UTC, UT1, TAI, TGPS, TT, Data Juliana, semana GPS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2.2"/></svg><div class="tt"><b>Sistemas de tempo</b></div></a><a class="tab on" href="/sobre" title="Sobre o sistema e o autor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c1.2-3.8 4.1-5.6 7.5-5.6s6.3 1.8 7.5 5.6"/></svg><div class="tt"><b>Sobre</b></div></a></nav></header>
+<main>
+<section class="card">
+<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+<div style="width:84px;height:84px;border-radius:50%;background:#12384f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;flex:none">IS</div>
+<div><h2 style="margin:0">Ivailton Pinheiro dos Santos</h2>
+<p style="margin:4px 0 0">Graduando em <b>Engenharia Cartográfica e de Agrimensura</b></p>
+<p style="margin:2px 0 0">Universidade Federal Rural da Amazônia (<b>UFRA</b>) · Campus Belém (ICIBE) · Belém, Pará</p></div></div>
+</section>
+<section class="card"><h2>Sobre o sistema</h2>
+<p>Sistema web desenvolvido em Python (Flask) para apoiar os trabalhos práticos de <b>Geodésia</b>, reunindo em um só lugar o processamento e a análise de dados GNSS e de parâmetros de orientação da Terra.</p>
+<div class="rolar"><table class="tt3"><tr><th>Aba</th><th>O que faz</th></tr>
+<tr><td>Efemérides</td><td>Posição de satélites GNSS por efemérides transmitidas e comparação com as precisas (SP3)</td></tr>
+<tr><td>Observáveis</td><td>Combinações Lg, Lc e Pc e detecção de saltos de ciclo em dados da RBMC</td></tr>
+<tr><td>Qualidade (TEQC)</td><td>Completude, multicaminho (MP1, MP2), SNR e saltos de ciclo, no estilo do teqc +qc</td></tr>
+<tr><td>Editar RINEX</td><td>Corte de sessões, filtro de constelação e de observáveis para o IBGE-PPP</td></tr>
+<tr><td>PPP (IBGE)</td><td>Leitura dos resultados do IBGE-PPP: σ3D, convergência e gráficos comparativos</td></tr>
+<tr><td>Movimento do polo</td><td>Coordenadas xp, yp do IERS (Boletim B) em torno de um evento</td></tr>
+<tr><td>Sistemas de tempo</td><td>Conversões entre UTC, UT1, TAI, TGPS, TT, Data Juliana e semana GPS</td></tr></table></div>
+<p style="margin-top:12px">Tecnologias: Python, Flask, NumPy, Matplotlib. Os resultados devem ser conferidos antes do uso em relatórios.</p>
+<p style="color:#5a6675;font-size:13px">© 2026 Ivailton Pinheiro dos Santos · UFRA</p></section>
+</main></body></html>

@@ -12,6 +12,7 @@ from datetime import date as _date
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 import modelos
+import sobre                                   # acrescenta a aba "Sobre" (dados do autor) às telas
 modelos.sincronizar(BASE)                      # recria telas ausentes, vazias ou antigas
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True      # usa o arquivo .html novo sem precisar reiniciar o servidor
@@ -554,6 +555,12 @@ def ppp_baixar(sid, what):
     return send_file(io.BytesIO(res['pngs'][k]), mimetype='image/png', as_attachment=True, download_name=f'ppp_grafico{k + 1}.png')
 
 
+# ------------------------------------------------------------------ Sobre (dados do autor)
+@app.route('/sobre')
+def sobre_pagina():
+    return render_template('sobre.html')
+
+
 @app.route('/diagnostico')
 def diagnostico():
     import sys, importlib
@@ -562,7 +569,7 @@ def diagnostico():
         p = os.path.join(BASE, 'templates', n + '.html'); tam = os.path.getsize(p) if os.path.exists(p) else -1
         L.append(f'templates/{n}.html: {tam} bytes  ' + ('OK' if tam > 1000 else 'PROBLEMA (vazio ou ausente)'))
     L.append('')
-    for m in ('nucleo', 'observaveis', 'controle_qualidade', 'crinex', 'tempo', 'polo', 'rinex_edit', 'ppp'):
+    for m in ('nucleo', 'observaveis', 'controle_qualidade', 'crinex', 'tempo', 'polo', 'rinex_edit', 'ppp', 'sobre'):
         try:
             L.append(f'{m}.py: OK ({os.path.basename(importlib.import_module(m).__file__)})')
         except Exception as e:
